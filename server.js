@@ -1,126 +1,224 @@
-const express = require('express');
-const axios = require('axios');
-require('dotenv').config();
-
-const app = express();
-app.use(express.json());
-
-const SUMUP_API_KEY = process.env.SUMUP_API_KEY;
-const SUMUP_MERCHANT_CODE = process.env.SUMUP_MERCHANT_CODE;
-const SHOPIFY_ACCESS_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
-const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL;
-
-// Health check
-app.get('/', (req, res) => {
-  res.json({ 
-    success: true,
-    message: 'SumUp Gateway is running',
-    endpoints: {
-      payment_gateway: '/payment-gateway',
-      create_payment: '/create-payment (POST)'
-    }
-  });
-});
-
-// Gateway registration - VISA & MASTERCARD ONLY
-app.get('/payment-gateway', (req, res) => {
-  res.json({
-    payment_gateway: {
-      id: 'sumup-visa-mastercard',
-      name: 'Pay with Card (Visa/Mastercard)',
-      type: 'offsite',
-      supports: ['visa', 'mastercard'],  // Only Visa and Mastercard
-      countries: ['FR', 'DE', 'IT', 'ES', 'GB', 'US'],
-      currencies: ['EUR', 'GBP', 'USD', 'AUD']
-    }
-  });
-});
-
-// Create payment
-app.post('/create-payment', async (req, res) => {
+// Branded payment page
+app.get('/pay/:checkoutId', async (req, res) => {
   try {
-    const { amount, currency, order_id, return_url } = req.body;
+    const { checkoutId } = req.params;
     
-    console.log('💳 Processing payment for order:', order_id);
-    console.log(`Amount: ${amount} ${currency}`);
-    
-    // Create checkout in SumUp
-    const sumupResponse = await axios.post(
-      'https://api.sumup.com/v0.1/checkouts',
-      {
-        checkout_reference: `shopify_${order_id}`,
-        amount: amount,
-        currency: currency || 'EUR',
-        description: `Order #${order_id}`,
-        merchant_code: SUMUP_MERCHANT_CODE,
-        return_url: `http://localhost:3000/payment-result`,
-        redirect_url: return_url,
-        payment_types: ['card']  // Only card payments
-      },
-      {
-        headers: { 
-          'Authorization': `Bearer ${SUMUP_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      }
+    // Get checkout details from SumUp
+    const response = await axios.get(
+      `https://api.sumup.com/v0.1/checkouts/${checkoutId}`,
+      { headers: { 'Authorization': `Bearer ${SUMUP_API_KEY}` } }
     );
     
-    res.json({
-      success: true,
-      redirect_url: sumupResponse.data.checkout_url
-    });
+    const checkout = response.data;
+    
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Veniosh - Secure Payment</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+          }
+          .payment-card {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+          }
+          .logo {
+            text-align: center;
+            margin-bottom: 30px;
+          }
+          .logo h1 {
+            color: #333;
+            font-size: 28px;
+          }
+          .amount {
+            background: #f7f7f7;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 30px;
+          }
+          .amount-label {
+            color: #666;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+          }
+          .amount-value {
+            color: #333;
+            font-size: 48px;
+            font-weight: bold;
+            margin-top: 10px;
+          }
+          .card-icons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 8px;
+          }
+          .card-icon {
+            font-size: 24px;
+            opacity: 0.7;
+          }
+          .card-icon.active {
+            opacity: 1;
+            font-weight: bold;
+          }
+          #sumup-card-container {
+            margin: 30px 0;
+            min-height: 300px;
+          }
+          .footer {
+            text-align: center;
+            color: #999;
+            font-size: 12px;
+            margin-top: 30px;
+          }
+          .secure-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: #4CAF50;
+            margin-bottom: 20px;
+          }
+        </style>
+        <script src="https://gateway.sumup.com/gateway/ecom/card/v2/sdk.js"></script>
+      </head>
+      <body>
+        <div class="payment-card">
+          <div class="logo">
+            <h1>✨ Veniosh</h1>
+          </div>
+          
+          <div class="amount">
+            <div class="amount-label">Total Amount</div>
+            <div class="amount-value">${checkout.currency} ${checkout.amount}</div>
+          </div>
+          
+          <div class="secure-badge">
+            <span>🔒</span>
+            <span>Secure 256-bit SSL encryption</span>
+          </div>
+          
+          <div class="card-icons">
+            <span class="card-icon active">💳 Visa</span>
+            <span class="card-icon active">💳 Mastercard</span>
+          </div>
+          
+          <div id="sumup-card-container"></div>
+          
+          <div class="footer">
+            <p>Payments processed securely by SumUp</p>
+            <p>© ${new Date().getFullYear()} Veniosh. All rights reserved.</p>
+          </div>
+        </div>
+        
+        <script>
+          document.addEventListener('DOMContentLoaded', function() {
+            SumUpCard.mount({
+              id: 'sumup-card-container',
+              checkoutId: '${checkoutId}',
+              onResponse: function(type, body) {
+                console.log('Payment response:', type, body);
+                if (type === 'success') {
+                  window.location.href = '/payment-success?sumup_id=${checkoutId}';
+                } else if (type === 'fail') {
+                  alert('Payment failed. Please try again.');
+                }
+              },
+              showEmail: true,
+              locale: 'en-US'
+            });
+          });
+        </script>
+      </body>
+      </html>
+    `);
     
   } catch (error) {
-    console.error('❌ Error:', error.response?.data || error.message);
-    res.status(500).json({ 
-      error: 'Failed to create payment',
-      details: error.message 
-    });
+    res.status(500).send('Error loading payment page');
   }
 });
 
-// Payment result
-app.get('/payment-result', async (req, res) => {
-  const { sumup_id, status } = req.query;
-  
-  if (status === 'PAID') {
-    res.send(`
-      <html>
-        <body style="font-family: Arial; text-align: center; padding: 50px;">
-          <h2 style="color: green;">✅ Payment Successful!</h2>
-          <p>Your payment was processed successfully.</p>
-          <p>You will be redirected shortly...</p>
-          <script>
-            setTimeout(() => {
-              window.close();
-            }, 3000);
-          </script>
-        </body>
-      </html>
-    `);
-  } else {
-    res.send(`
-      <html>
-        <body style="font-family: Arial; text-align: center; padding: 50px;">
-          <h2 style="color: red;">❌ Payment Failed</h2>
-          <p>Please try again or use a different card.</p>
-          <button onclick="window.close()">Close</button>
-        </body>
-      </html>
-    `);
-  }
-});
-
-// Webhook for real-time notifications
-app.post('/payment-webhook', (req, res) => {
-  console.log('Webhook received:', req.body);
-  res.status(200).send('OK');
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`✅ SumUp Gateway running on port ${PORT}`);
-  console.log(`📍 Visa/Mastercard only`);
-  console.log(`📍 Test: http://localhost:${PORT}`);
-  console.log(`📍 Gateway: http://localhost:${PORT}/payment-gateway`);
+// Success page
+app.get('/payment-success', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Payment Successful - Veniosh</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+        }
+        .success-card {
+          background: white;
+          border-radius: 20px;
+          padding: 50px;
+          text-align: center;
+          max-width: 400px;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .checkmark {
+          color: #4CAF50;
+          font-size: 80px;
+          margin-bottom: 20px;
+        }
+        h1 {
+          color: #333;
+          margin-bottom: 20px;
+        }
+        p {
+          color: #666;
+          margin-bottom: 30px;
+          line-height: 1.6;
+        }
+        .button {
+          background: #667eea;
+          color: white;
+          border: none;
+          padding: 15px 40px;
+          border-radius: 8px;
+          font-size: 16px;
+          cursor: pointer;
+          text-decoration: none;
+          display: inline-block;
+        }
+        .button:hover {
+          background: #5a67d8;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="success-card">
+        <div class="checkmark">✅</div>
+        <h1>Payment Successful!</h1>
+        <p>Thank you for your purchase. You will receive a confirmation email shortly.</p>
+        <a href="https://veniosh.com" class="button">Return to Store</a>
+      </div>
+    </body>
+    </html>
+  `);
 });
