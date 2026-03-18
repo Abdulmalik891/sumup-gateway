@@ -275,3 +275,14 @@ app.post('/create-payment', async (req, res) => {
     });
   }
 });
+
+// ===========================================
+// START SERVER - ADD THIS AT THE BOTTOM
+// ===========================================
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`✅ SumUp Gateway running on port ${PORT}`);
+  console.log(`📍 Visa/Mastercard only`);
+  console.log(`📍 Test: http://localhost:${PORT}`);
+  console.log(`📍 Gateway: http://localhost:${PORT}/payment-gateway`);
+});
