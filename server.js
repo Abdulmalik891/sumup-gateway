@@ -222,3 +222,56 @@ app.get('/payment-success', (req, res) => {
     </html>
   `);
 });
+
+// In your create-payment endpoint, after getting sumupResponse
+res.json({
+  success: true,
+  redirect_url: `https://sumup-gateway.onrender.com/pay/${sumupResponse.data.id}`
+});
+
+// ===========================================
+// CREATE PAYMENT ENDPOINT - ADD THIS
+// ===========================================
+app.post('/create-payment', async (req, res) => {
+  try {
+    const { amount, currency, order_id, customer_email, return_url } = req.body;
+    
+    console.log('💳 Creating SumUp checkout for order:', order_id);
+    
+    // Create checkout in SumUp
+    const sumupResponse = await axios.post(
+      'https://api.sumup.com/v0.1/checkouts',
+      {
+        checkout_reference: `shopify_${order_id}`,
+        amount: amount,
+        currency: currency || 'EUR',
+        description: `Order #${order_id} from Veniosh`,
+        merchant_code: SUMUP_MERCHANT_CODE,
+        return_url: `https://sumup-gateway.onrender.com/payment-result`,
+        redirect_url: return_url,
+        payment_types: ['card']
+      },
+      {
+        headers: { 
+          'Authorization': `Bearer ${SUMUP_API_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    console.log('✅ SumUp checkout created:', sumupResponse.data.id);
+    
+    // Return redirect URL to your branded payment page
+    res.json({
+      success: true,
+      redirect_url: `https://sumup-gateway.onrender.com/pay/${sumupResponse.data.id}`
+    });
+    
+  } catch (error) {
+    console.error('❌ Error creating checkout:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: 'Failed to create payment',
+      details: error.message 
+    });
+  }
+});
